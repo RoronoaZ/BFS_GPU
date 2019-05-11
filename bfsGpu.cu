@@ -416,12 +416,6 @@ int main(int argc, char *argv[]){
 	int size = numVertices * sizeof(int);
 	
 	
-	//Cuda pointers
-	//int * d_parent;
-	//int * d_depth;
-	//int * d_V;
-	//int * d_A;
-	
 	
 	//initBFSgpu(V, A, source_vertex, depth, parent, numVertices, numEdges);
 	printf("PRE-CHECK\n");
@@ -430,7 +424,7 @@ int main(int argc, char *argv[]){
 	//AllINeed = seq_bfs(V, A, numVertices, source_vertex);
 	//cudaDeviceSynchronize();
 
-	//finalizeCudaBfs(distance, parent, size);
+	
 
 
 
