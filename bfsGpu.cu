@@ -10,11 +10,9 @@
 #include <cuda.h>
 #include <limits>
 #include <vector>
+#include <cstdlib>
+
 using namespace std;
-
-
-//CUdeviceptr d_depth;
-//CUdeviceptr d_parent;
 
 
 
@@ -63,50 +61,59 @@ void finalizeCudaBfs(int *&depth, int *&parent, int size) {
 
 //=================ParallelGPU================//
 __global__
-void TopDown(int num_vertices, int * d_V, int * d_A, int level, int *&d_parent, int *&d_depth, int *changed){
+void TopDown(int num_vertices, int * d_V, int * d_A, int level, int *d_parent, int *d_depth, int &changed){
 
 int tid = blockIdx.x * blockDim.x + threadIdx.x;
 int CValue = 0;
-		
-printf("CHECK 1");
 
-if (tid < num_vertices && d_depth[tid] == level){
-	int u = tid;
+//printf("The number of vertices: %d\n", num_vertices);
+//printf("TID = %d \n", tid);
+
+//printf("d_depth[0]%d\n", d_depth[0]);
+
+if (tid < num_vertices /*&& d_depth[tid] == level*/){
+	int u = tid; //changed=1;
 	for(int i= d_V[u]; i< d_V[u+1]-d_V[u]; i++){
 		int v = d_A[i];
 		if(level + 1 < d_depth[v]){
+	//	if(d_depth[v]==2147483647){
 			d_depth[v] = level+1;
 			d_parent[v] = i;			
 			CValue = 1;
-		}
-	printf("TID = %d | d_depth[450] %d \n", tid, d_depth[450]);
+//printf("d_depth[v]= %d\n", d_depth[v]);
+			}
+//		}
 	}
 
 }
 	if(CValue){
-		*changed = CValue;	
+		//changed = CValue;
+		d_parent[0] = CValue; 
 	}
-
+//	printf("CValue\n");
 
 }
 
 //============================================//
 
 //===============ParallelCudaBFS==============//
-
+/*
 void simParallelCudaBFS(int * V, int * A, int source_vertex, int *&depth, int *&parent, int numVertices, int numEdges){
 
+	printf("CHECK 2");
+	
 	//initBFSgpu(V, A, startVertex, depth, parent, numVertices, numEdges);
 	
-	printf("source vertex %d", source_vertex);
-	int firstVertex = source_vertex;
+	//printf("source vertex %d", source_vertex);
+	//int firstVertex = source_vertex;
 
 int * d_depth;
 int * d_parent;
 int * d_V;
 int * d_A;
 
-printf("CHECK 2");
+
+printf("CHECK 3");
 
 int size = numVertices * sizeof(int);
 int e_size = numEdges * sizeof(int);
@@ -117,8 +124,8 @@ cudaMalloc((void **)&d_depth, size);
 cudaMalloc((void **)&d_V, size);
 cudaMalloc((void **)&d_A, e_size); 
 
-parent = (int *)malloc(size); //random_ints(parent, numVertices);
-depth = (int *)malloc(size); //random_ints(depth, numVertices);
+//parent = (int *)malloc(size); //random_ints(parent, numVertices);
+//depth = (int *)malloc(size); //random_ints(depth, numVertices);
 
 parent[source_vertex] = 0;
 depth[source_vertex] = 0;
@@ -140,10 +147,11 @@ cudaMalloc((void **)&changed, sizeof(int));
 	while(*changed){
 	
 		*changed = 0;
-		TopDown<<<numVertices/256 + 1, 256>>>(numVertices, d_V, d_A, level, d_parent, d_depth, changed);
-		cudaDeviceSynchronize();
+		TopDown<<< 1, 6>>>(numVertices, d_V, d_A, level, d_parent, d_depth, changed);
+		//cudaDeviceSynchronize();
 		level++;
 	}
+	cudaDeviceSynchronize();
 	
 	cudaMemcpy(parent, d_parent, numVertices * sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(depth, d_depth, numVertices * sizeof(int), cudaMemcpyDeviceToHost);	
@@ -152,7 +160,7 @@ cudaMalloc((void **)&changed, sizeof(int));
 	//finalizeCudaBfs(distance, parent, size);
 
 }
-
+*/
 //============================================//
 //=================READ_MTX===================//
 
@@ -172,7 +180,7 @@ int ** read_mtx(char*fname){
 
 
 
-  int tuplesStartCounter = 0;
+ // int tuplesStartCounter = 0;
 
   //pass information part in the file
   while(getline(input, line)){
@@ -350,7 +358,6 @@ void ** seq_bfs(int * v, int * a, int numVertices, int sourceNode){
                                         next[nSize++]=n;
                                         depthCount[step]++;
                                 }
-
 #ifdef DEBUG
 				//else
 					 //cout << " not added ";
@@ -399,31 +406,115 @@ int main(int argc, char *argv[]){
 		return 0;
 	}
 
+	int * d_depth ;
+	int * d_parent;
+	int * d_V;
+	int * d_A;
+
+
 	int ** graph = read_mtx(argv[1]);
 	int * V = graph[0];
 	int * A = graph[1];
-	int numVertices = graph[2][0];
+        int numVertices = graph[2][0];
 	int numEdges = graph[2][1];	
 	printf("The num of vertices is %d \n ", numVertices);
 	printf("The num of edges is %d \n ", numEdges);
 	
 	void ** AllINeed = new void *[3];
-	int source_vertex = (rand()%numVertices);
+	int source_vertex = (rand() % numVertices)+1;
 	
 	//Host pointers
 	int * depth;
 	int * parent;
-	int size = numVertices * sizeof(int);
+	int size = (numVertices+1) * sizeof(int);
+	printf("EKHDEM YA KHRA \n");
+	int e_size = numEdges * sizeof(int);
+
+
+	cudaMalloc((void **)&d_parent, size);
+	cudaMalloc((void **)&d_depth, size);
+	cudaMalloc((void **)&d_V,  size);
+	cudaMalloc((void **)&d_A, e_size); 
+
+		
+	parent = (int *)malloc(size); //random_ints(parent, numVertices);
+	depth = (int *)malloc(size); //random_ints(depth, numVertices);
+	for(int i=0; i<numVertices; i++){
+		depth[i] = std::numeric_limits<int>::max();
+		parent[i] = std::numeric_limits<int>::max();
+		//depth[i] = 0; parent[i] = 0;
+	}
+	parent[source_vertex] = 0;
+	depth[source_vertex] = 0;
+
+
+	cudaError_t rc = cudaMemcpy(d_depth, depth, size, cudaMemcpyHostToDevice);
+	if (rc != cudaSuccess)
+		printf("Could not allocate memory: %d", rc);
+	cudaMemcpy(d_parent, parent, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_V, V, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_A, A, sizeof(int) * numEdges, cudaMemcpyHostToDevice);
+
+	
+	//cudaDeviceSynchronize();
+
+	//printf("HERE YA ZA7I\n");
+	//printf("ZA777III1\n");
+	printf("ZA777III2\n");
+	//printf("d_depth[111] = %d\n", d_parent[111]);
+	int changed;
+	cudaMalloc((void **)&changed, sizeof(int));
+	int level = 0;
+	changed = 1;
+	//int changed_host;
+	//changed_host = (int)malloc(sizeof(int));
+	//changed_host = 1;
+	//cudaMemcpy(*changed, changed_host, sizeof(int), cudaMemcpyHostToDevice);
+	parent[0] = 1;
+int iter =0;
+//	while(changed){
+	while(parent[0]==1){
+//		printf("Entered here\n");
+		//changed = 0;
+		parent[0] = 0;
+		//changed_host = 0;
+		TopDown<<<1, 10>>>(numVertices, d_V, d_A, level, d_parent, d_depth, changed);
+		
+		cudaMemcpy(parent, d_parent, numVertices * sizeof(int), cudaMemcpyDeviceToHost);
+		cudaMemcpy(depth, d_depth, numVertices * sizeof(int), cudaMemcpyDeviceToHost);	
+
+		cudaDeviceSynchronize();
+		//cudaMemcpy(changed_host, *changed, sizeof(int), cudaMemcpyDeviceToHost);
+		level++;
+//changed++;
+iter++; if(iter==50) break;		
+//printf("Level = %d\n", level);
+	}
 	
 	
 	
+	//printf("FINITTA\n");
+
+	//cudaMemcpy(parent, d_parent, numVertices * sizeof(int), cudaMemcpyDeviceToHost);
+       // cudaMemcpy(depth, d_depth, numVertices * sizeof(int), cudaMemcpyDeviceToHost);	
+	//for(int i =0; i<numVertices; i++)
+	printf("parent[i] = : %d\n", depth[1000]);
+
+	printf("FINALIZED\n");
+	//finalizeCudaBfs(distance, parent, size);
+
+	
+
+	//========================================================//
+	/*	
 	//initBFSgpu(V, A, source_vertex, depth, parent, numVertices, numEdges);
 	printf("PRE-CHECK\n");
+	printf("source: %d \t numVertices: %d \t numEdges: %d \n", source_vertex, numVertices, numEdges);
 	simParallelCudaBFS(V, A, source_vertex, depth, parent, numVertices, numEdges);
 	printf("depth[source_vertex] %d \n", depth[source_vertex]);
 	//AllINeed = seq_bfs(V, A, numVertices, source_vertex);
 	//cudaDeviceSynchronize();
-
+	*/
 	
 
 
